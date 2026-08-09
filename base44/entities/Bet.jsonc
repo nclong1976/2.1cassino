@@ -1,0 +1,63 @@
+{
+  "name": "Bet",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "string"
+    },
+    "userEmail": {
+      "type": "string"
+    },
+    "hallId": {
+      "type": "string"
+    },
+    "hallName": {
+      "type": "string"
+    },
+    "tier": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "result": {
+      "type": "string",
+      "enum": [
+        "win",
+        "loss",
+        "pending"
+      ],
+      "default": "pending"
+    },
+    "period": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "userEmail",
+    "hallName",
+    "amount"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
