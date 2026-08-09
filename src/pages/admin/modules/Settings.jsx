@@ -5,10 +5,11 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Upload, Save } from "lucide-react";
 import { Panel, inputCls } from "../ui";
-import { getBannerConfig, saveBannerConfig } from "@/lib/bannerStore";
+import { getBannerConfig, saveBannerConfig, extractZipArchive, readFileAsDataUrl } from "@/lib/bannerStore";
 
 const KEY = "sands_settings";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+const saveSettings = (s) => localStorage.setItem(KEY, JSON.stringify(s));
 
 export default function Settings() {
   const { toast } = useToast();
@@ -17,36 +18,35 @@ export default function Settings() {
   const [bannerType, setBannerType] = useState("video");
 
   useEffect(() => {
-    base44.entities.GameHall.list().then(setHalls).catch(() => {});
     const cfg = getBannerConfig();
     if (cfg.banners?.[0]) {
       setS((p) => ({ ...p, banner: cfg.banners[0].url || p.banner }));
       setBannerType(cfg.banners[0].type || "video");
     }
+    base44.entities.GameHall.list().then((res) => setHalls(res || [])).catch(() => {});
   }, []);
 
   const set = (k, v) => setS((p) => ({ ...p, [k]: v }));
 
   const save = () => {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    saveSettings(s);
 
     // Also sync to bannerStore
     if (s.banner) {
       const currentCfg = getBannerConfig();
       const firstBanner = currentCfg.banners?.[0] || {};
       const updatedBanner = {
+        ...firstBanner,
         id: firstBanner.id || "banner_1",
         type: bannerType,
-        title: firstBanner.title || "Sands Club Live Casino",
+        title: firstBanner.title || "Sands Club Banner",
         subtitle: firstBanner.subtitle || "Sòng bài giải trí trực tuyến",
         url: s.banner,
-        poster: firstBanner.poster || "",
         autoPlay: true,
         loop: true,
         muted: true,
         controls: false,
         active: true,
-        badge: firstBanner.badge || "HOT 💥",
       };
       const updatedBanners = [updatedBanner, ...currentCfg.banners.slice(1)];
       saveBannerConfig({ ...currentCfg, banners: updatedBanners });
@@ -56,15 +56,42 @@ export default function Settings() {
   };
 
   const onUpload = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const isVid = f.type.startsWith("video");
+    const files = e.target.files; if (!files || files.length === 0) return;
+    const f = files[0];
+
+    // Tự động giải nén tệp ZIP banner nếu admin tải tệp ZIP lên
+    if (f.name.toLowerCase().endsWith(".zip")) {
+      toast({ title: "Đang tự động giải nén tệp ZIP...", description: `Tệp: ${f.name}` });
+      try {
+        const extracted = await extractZipArchive(f);
+        if (extracted.length > 0) {
+          const currentCfg = getBannerConfig();
+          const updated = { ...currentCfg, banners: [...extracted, ...currentCfg.banners] };
+          saveBannerConfig(updated);
+          set("banner", extracted[0].url);
+          setBannerType(extracted[0].type);
+          toast({
+            title: "Giải nén ZIP thành công!",
+            description: `Đã trích xuất ${extracted.length} banner và áp dụng ngay lập tức cho người dùng.`,
+            variant: "success",
+          });
+        } else {
+          toast({ title: "Tệp ZIP không chứa ảnh/video hợp lệ", variant: "destructive" });
+        }
+      } catch (err) {
+        toast({ title: "Lỗi giải nén tệp ZIP", description: err.message, variant: "destructive" });
+      }
+      return;
+    }
+
+    const isVid = f.type.startsWith("video") || f.name.match(/\.(mp4|webm|mov)$/i);
     setBannerType(isVid ? "video" : "image");
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file: f });
       set("banner", file_url);
       toast({ title: `Đã tải ${isVid ? "video" : "ảnh"} banner` });
     } catch {
-      const localUrl = URL.createObjectURL(f);
+      const localUrl = await readFileAsDataUrl(f);
       set("banner", localUrl);
       toast({ title: "Đã chọn file banner cục bộ" });
     }
