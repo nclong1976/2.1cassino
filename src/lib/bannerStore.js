@@ -1,10 +1,23 @@
 // Centralized Banner Store: manages single/multiple image or video banners
 // Provides real-time synchronization across client and admin components.
 import JSZip from "jszip";
+import promoBannerImg from "@/assets/banner_khuyen_mai.jpg";
 
 const STORAGE_KEY = "sands_banner_config";
 
+export const PROMO_BANNER_URL = promoBannerImg;
+
 export const PRESET_BANNERS = [
+  {
+    name: "Ảnh Khuyến Mãi Tri Ân Đặc Biệt MBS",
+    type: "image",
+    url: promoBannerImg,
+    poster: "",
+    title: "KHUYẾN MÃI TRI ÂN ĐẶC BIỆT",
+    subtitle: "Marina Bay Sands MBS - Thưởng tích lũy lên tới 588.888$",
+    badge: "ĐẶC BIỆT 🎁",
+    objectFit: "cover"
+  },
   {
     name: "Video Sands Casino MP4 (Gốc)",
     type: "video",
@@ -54,6 +67,22 @@ export const DEFAULT_BANNER_CONFIG = {
   objectFitGlobal: "cover",
   transitionEffect: "fade", // "fade" | "slide" | "zoom" | "flip"
   banners: [
+    {
+      id: "banner_promo_mbs",
+      type: "image",
+      title: "KHUYẾN MÃI TRI ÂN ĐẶC BIỆT",
+      subtitle: "Marina Bay Sands MBS - Thưởng nạp tích lũy lên tới 588.888$",
+      url: promoBannerImg,
+      poster: "",
+      autoPlay: true,
+      loop: true,
+      muted: true,
+      controls: false,
+      active: true,
+      linkUrl: "",
+      badge: "HOT 🎁",
+      objectFit: "cover"
+    },
     {
       id: "banner_1",
       type: "video", // "video" | "image"
@@ -119,10 +148,16 @@ export const getBannerConfig = () => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_BANNER_CONFIG;
     const parsed = JSON.parse(raw);
+    const banners = Array.isArray(parsed.banners) && parsed.banners.length > 0 ? parsed.banners : DEFAULT_BANNER_CONFIG.banners;
+    
+    // Đảm bảo banner Khuyến Mãi Tri Ân Đặc Biệt luôn có mặt trong danh sách nếu chưa được thêm
+    const hasPromo = banners.some((b) => b.id === "banner_promo_mbs" || b.url === promoBannerImg);
+    const finalBanners = hasPromo ? banners : [DEFAULT_BANNER_CONFIG.banners[0], ...banners];
+
     return {
       ...DEFAULT_BANNER_CONFIG,
       ...parsed,
-      banners: Array.isArray(parsed.banners) && parsed.banners.length > 0 ? parsed.banners : DEFAULT_BANNER_CONFIG.banners
+      banners: finalBanners
     };
   } catch {
     return DEFAULT_BANNER_CONFIG;
