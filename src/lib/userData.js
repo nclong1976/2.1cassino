@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
+import { isSupabaseConfigured } from "./supabase";
+import { spGetUserProfile } from "./supabaseService";
 
 // Kho dữ liệu cá nhân theo user (localStorage) — trạng thái sạch khi đăng ký.
 const key = (userId) => `userdata_${userId}`;
@@ -118,10 +120,20 @@ export const useUserData = (userId) => {
     const handleFocus = () => refresh();
     window.addEventListener("focus", handleFocus);
 
-    // 5. Real-time polling mechanism (every 1 second)
+    // 5. Real-time polling mechanism & Supabase remote balance sync
     const timer = setInterval(() => {
       refresh();
-    }, 1000);
+      if (isSupabaseConfigured() && uid && uid !== 'guest_user') {
+        spGetUserProfile(uid).then((spProfile) => {
+          if (spProfile && typeof spProfile.balance === 'number') {
+            const currentData = getUserData(uid);
+            if (currentData.balance !== spProfile.balance) {
+              updateUserData(uid, { balance: spProfile.balance });
+            }
+          }
+        }).catch(() => {});
+      }
+    }, 2000);
 
     return () => {
       unsub();

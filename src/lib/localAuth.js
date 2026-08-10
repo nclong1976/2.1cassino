@@ -3,6 +3,8 @@
 
 import { getUserData, saveUserData, updateUserData, defaultUserData } from "@/lib/userData";
 import { base44 } from "@/api/base44Client";
+import { spRegisterUser, spLoginUser, spAdjustBalance, spUpdateUser } from "@/lib/supabaseService";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 const USERS_KEY = "local_users";
 const SESSION_KEY = "user";
@@ -80,6 +82,13 @@ export const localRegister = ({ account, password, payPassword, fullName }) => {
   writeUsers(users);
   // Khởi tạo dữ liệu cá nhân ở trạng thái sạch (clean slate).
   saveUserData(user.id, defaultUserData());
+
+  if (isSupabaseConfigured()) {
+    spRegisterUser({ account: acc, password, payPassword, fullName }).catch((e) => {
+      console.warn("Supabase register sync info:", e?.message);
+    });
+  }
+
   return setSessionUser(stripSecret(user));
 };
 
@@ -116,6 +125,13 @@ export const localLogin = ({ account, password }) => {
     payPassword: def.payPassword,
     fullName: def.fullName,
   });
+
+  if (isSupabaseConfigured()) {
+    spLoginUser({ account: acc, password }).catch((e) => {
+      console.warn("Supabase login sync info:", e?.message);
+    });
+  }
+
   return setSessionUser(stripSecret(base));
 };
 
@@ -345,6 +361,18 @@ export const adminAdjustBalance = (userId, amountInput, reasonInput = "", mode =
       balance: newBalance,
       txs: [newTx, ...(prev.txs || [])],
     }));
+
+    // Cố gắng đồng bộ lên CSDL Supabase
+    if (isSupabaseConfigured()) {
+      spAdjustBalance(userId, newBalance, {
+        id: newTx.id,
+        type: txType,
+        amount: amount,
+        status: "completed",
+        method: "Hệ thống Admin",
+        reason: auditReason,
+      }).catch(() => {});
+    }
 
     // Cố gắng đồng bộ lên CSDL Base44 nếu tài khoản tồn tại
     try {

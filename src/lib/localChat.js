@@ -1,4 +1,6 @@
 import { triggerAdminNotification } from "@/lib/adminNotifications";
+import { isSupabaseConfigured } from "./supabase";
+import { spSendChatMessage, spSubscribeChat, spFetchChatMessages } from "./supabaseService";
 
 // Kho chat local (localStorage) — trao đổi tin nhắn giữa User và Admin.
 // Chạy hoàn toàn trong trình duyệt, realtime qua in-memory + storage event.
@@ -66,6 +68,15 @@ export const addChatMessage = ({ userId, userEmail, userName, senderRole, body, 
   msgs.push(msg);
   write(msgs);
 
+  if (isSupabaseConfigured()) {
+    spSendChatMessage({
+      id: msg.id,
+      userId: userId,
+      username: userName || userEmail || 'User',
+      message: body || (image ? '[Hình ảnh]' : ''),
+    }).catch(() => {});
+  }
+
   if (senderRole === "user") {
     try {
       triggerAdminNotification(
@@ -81,5 +92,28 @@ export const addChatMessage = ({ userId, userEmail, userName, senderRole, body, 
 
 export const subscribeChat = (cb) => {
   listeners.add(cb);
-  return () => listeners.delete(cb);
+
+  let unsubSupabase = () => {};
+  if (isSupabaseConfigured()) {
+    unsubSupabase = spSubscribeChat((spMsg) => {
+      if (spMsg) {
+        const msgs = read();
+        if (!msgs.some((m) => m.id === spMsg.id)) {
+          msgs.push({
+            id: spMsg.id,
+            userId: spMsg.user_id,
+            userName: spMsg.username,
+            body: spMsg.message,
+            created_date: spMsg.created_at,
+          });
+          write(msgs);
+        }
+      }
+    });
+  }
+
+  return () => {
+    listeners.delete(cb);
+    unsubSupabase();
+  };
 };
