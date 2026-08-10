@@ -21,7 +21,6 @@ import AdminApp from './pages/admin/AdminApp';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Splash from './pages/Splash';
-import OAuthConsent from './pages/OAuthConsent';
 // Add page imports here
 
 import { useEffect } from 'react';
@@ -55,7 +54,7 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      const PUBLIC_ROUTES = ['/', '/login', '/register', '/oauth/consent'];
+      const PUBLIC_ROUTES = ['/', '/login', '/register'];
       if (!PUBLIC_ROUTES.includes(window.location.pathname)) {
         navigateToLogin();
         return null;
@@ -82,7 +81,6 @@ const AuthenticatedApp = () => {
         </Route>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/oauth/consent" element={<OAuthConsent />} />
         {/* Add your page Route elements here */}
         <Route path="*" element={<PageNotFound />} />
       </Routes>
