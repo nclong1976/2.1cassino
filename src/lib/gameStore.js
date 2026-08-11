@@ -1,5 +1,7 @@
 // Centralized Game Store: manages game statuses, countdown timers, payout odds, custom games list, and audit logs.
 // Provides real-time synchronization across client and admin components.
+import { emitSocketEvent } from './socket';
+import { queryClientInstance } from './query-client';
 
 const STORAGE_KEY = "sands_game_store_config";
 const AUDIT_LOG_KEY = "sands_game_audit_log";
@@ -162,6 +164,15 @@ export const saveGameConfigs = (configs) => {
     } catch {
       /* ignore */
     }
+  }
+
+  // 4. Update TanStack Query cache & Emit Socket.io Event
+  try {
+    queryClientInstance.setQueryData(['gameConfigs'], configs);
+    queryClientInstance.invalidateQueries({ queryKey: ['gameConfigs'] });
+    emitSocketEvent('game:config_change', { configs });
+  } catch {
+    /* ignore */
   }
 };
 

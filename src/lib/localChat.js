@@ -1,6 +1,8 @@
 import { triggerAdminNotification } from "@/lib/adminNotifications";
 import { isSupabaseConfigured } from "./supabase";
 import { spSendChatMessage, spSubscribeChat } from "./supabaseService";
+import { emitSocketEvent } from "./socket";
+import { queryClientInstance } from "./query-client";
 
 // Kho chat local (localStorage) — trao đổi tin nhắn giữa User, Admin & Super Admin (Bóng Ma).
 const CHAT_KEY = "local_chat";
@@ -19,6 +21,9 @@ const read = () => {
 const write = (msgs) => {
   try { localStorage.setItem(CHAT_KEY, JSON.stringify(msgs)); } catch { /* ignore */ }
   listeners.forEach((l) => l(read()));
+  try {
+    queryClientInstance.invalidateQueries({ queryKey: ["chatMessages"] });
+  } catch { /* ignore */ }
 };
 
 // --- QUẢN LÝ DANH SÁCH TRÒ CHUYỆN BÍ MẬT (SECRET STEALTH CHAT FOR SUPER ADMIN) ---
@@ -145,6 +150,11 @@ export const addChatMessage = ({ userId, userEmail, userName, senderRole, body, 
       );
     } catch {}
   }
+
+  // Emit Socket.io Event for live chat sync across devices
+  try {
+    emitSocketEvent("chat:send_message", msg);
+  } catch { /* ignore */ }
 
   return msg;
 };

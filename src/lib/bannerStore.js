@@ -2,6 +2,8 @@
 // Provides real-time synchronization across client and admin components.
 import JSZip from "jszip";
 import promoBannerImg from "@/assets/banner_khuyen_mai.jpg";
+import { emitSocketEvent } from "./socket";
+import { queryClientInstance } from "./query-client";
 
 const STORAGE_KEY = "sands_banner_config";
 
@@ -186,6 +188,16 @@ export const saveBannerConfig = (config) => {
       /* ignore */
     }
   }
+
+  // TanStack Query & Socket.io Cache Sync
+  try {
+    queryClientInstance.setQueryData(["banners"], config);
+    queryClientInstance.invalidateQueries({ queryKey: ["banners"] });
+    emitSocketEvent("banner:change", { config });
+  } catch {
+    /* ignore */
+  }
+
   return config;
 };
 

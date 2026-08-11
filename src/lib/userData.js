@@ -6,6 +6,8 @@ import {
   spFetchUserWithdrawRequests,
   spSubscribeUserProfile,
 } from "./supabaseService";
+import { emitSocketEvent } from "./socket";
+import { queryClientInstance } from "./query-client";
 
 // Kho dữ liệu cá nhân theo user (localStorage cache + Supabase DB sync)
 const key = (userId) => `userdata_${userId}`;
@@ -61,6 +63,13 @@ export const saveUserData = (userId, data) => {
     } catch { /* ignore */ }
   } catch { /* ignore */ }
   listeners.forEach((l) => l(uid));
+
+  // Sync with TanStack Query & Socket.io
+  try {
+    queryClientInstance.setQueryData(["userData", uid], data);
+    queryClientInstance.invalidateQueries({ queryKey: ["userData", uid] });
+    emitSocketEvent("user:balance_change", { userId: uid, data });
+  } catch { /* ignore */ }
 };
 
 export const updateUserData = (userId, patch) => {

@@ -7,6 +7,8 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { I18nProvider } from '@/lib/I18nContext';
 import { NotificationProvider } from '@/lib/NotificationContext';
+import { SocketProvider } from '@/lib/SocketContext';
+import { useSocketQuerySync } from '@/lib/socketQuerySync';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import Home from './pages/Home';
 import ContainerAug4CodiaStudio from './pages/ContainerAug4CodiaStudio';
@@ -21,10 +23,18 @@ import AdminApp from './pages/admin/AdminApp';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Splash from './pages/Splash';
-// Add page imports here
 
 import { useEffect } from 'react';
 import { settlePendingBets } from '@/lib/gameRoundManager';
+
+const SocketQuerySyncInitializer = () => {
+  const { user } = useAuth();
+  const userId = user?.id || user?.account || user?.email;
+  const role = user?.role || 'user';
+
+  useSocketQuerySync(userId, role);
+  return null;
+};
 
 const GlobalBetSettler = () => {
   const { user } = useAuth();
@@ -81,29 +91,42 @@ const AuthenticatedApp = () => {
         </Route>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        {/* Add your page Route elements here */}
         <Route path="*" element={<PageNotFound />} />
       </Routes>
     </>
   );
 };
 
+const SocketProviderWrapper = ({ children }) => {
+  const { user } = useAuth();
+  const userId = user?.id || user?.account || user?.email;
+  const role = user?.role || 'user';
+  return (
+    <SocketProvider userId={userId} role={role}>
+      {children}
+    </SocketProvider>
+  );
+};
+
 function App() {
   return (
     <AuthProvider>
-      <I18nProvider>
-      <NotificationProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <Router>
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-          <TextToaster />
-        </QueryClientProvider>
-      </NotificationProvider>
-      </I18nProvider>
+      <SocketProviderWrapper>
+        <I18nProvider>
+          <NotificationProvider>
+            <QueryClientProvider client={queryClientInstance}>
+              <Router>
+                <SocketQuerySyncInitializer />
+                <AuthenticatedApp />
+              </Router>
+              <Toaster />
+              <TextToaster />
+            </QueryClientProvider>
+          </NotificationProvider>
+        </I18nProvider>
+      </SocketProviderWrapper>
     </AuthProvider>
-  )
+  );
 }
 
-export default App
+export default App;
