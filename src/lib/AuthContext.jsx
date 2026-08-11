@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
 
   // Kiểm tra thời gian thực trạng thái khóa tài khoản
   useEffect(() => {
-    if (!user || user.role === "admin") return;
+    if (!user || user.role === "admin" || user.role === "super_admin") return;
 
     const checkLockStatus = () => {
       try {

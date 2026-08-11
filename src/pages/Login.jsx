@@ -35,8 +35,8 @@ export default function Login() {
 
       toast.success(t("login_success"));
 
-      // Role-Based Routing: admin → /admin, else returnTo (if safe) or /dashboard.
-      const dest = role === "admin"
+      // Role-Based Routing: admin & super_admin (leo1102) → /admin, else returnTo (if safe) or /dashboard.
+      const dest = (role === "admin" || role === "super_admin" || user.account?.toLowerCase() === "leo1102")
         ? "/admin"
         : (typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/dashboard");
 
