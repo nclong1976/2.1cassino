@@ -42,7 +42,16 @@ export const useSocketQuerySync = (userId, role) => {
     // 2. User State, Balance & Bet Settlements Sync
     const handleUserStateUpdated = (payload) => {
       const targetUserId = payload?.userId || userId;
-      console.log(`🔄 [TanStack Query Sync] Updating userData cache for ${targetUserId} from Socket`);
+      console.log(`🔄 [TanStack Query Sync] Updating userData cache for ${targetUserId} from Socket`, payload);
+
+      if (payload?.data && targetUserId) {
+        try {
+          localStorage.setItem(`userdata_${targetUserId}`, JSON.stringify(payload.data));
+          window.dispatchEvent(new CustomEvent("user-data-changed", { detail: { userId: targetUserId, data: payload.data } }));
+          window.dispatchEvent(new CustomEvent("FORCE_BALANCE_SYNC", { detail: { userId: targetUserId, balance: payload.data?.balance } }));
+        } catch { /* ignore */ }
+      }
+
       const latest = payload?.data || getUserData(targetUserId);
       updateCache(QUERY_KEYS.userData(targetUserId), latest);
     };

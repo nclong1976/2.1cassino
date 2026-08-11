@@ -1,15 +1,27 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:4000';
+const getSocketUrl = () => {
+  if (import.meta.env.VITE_SOCKET_SERVER_URL) {
+    return import.meta.env.VITE_SOCKET_SERVER_URL;
+  }
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    const host = window.location.hostname;
+    return `${protocol}//${host}:4000`;
+  }
+  return 'http://localhost:4000';
+};
 
 let socketInstance = null;
 
 export const getSocket = () => {
   if (!socketInstance) {
-    socketInstance = io(SOCKET_SERVER_URL, {
+    const targetUrl = getSocketUrl();
+    console.log(`🔌 [Socket.io Client] Connecting to Socket Server at: ${targetUrl}`);
+    socketInstance = io(targetUrl, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: 20,
       reconnectionDelay: 1000,
       transports: ['websocket', 'polling'],
     });

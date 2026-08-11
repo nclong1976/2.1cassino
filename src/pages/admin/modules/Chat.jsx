@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import { Image as ImageIcon, Send, Search, Trash2, Ghost, ShieldAlert } from "lucide-react";
+import { Image as ImageIcon, Send, Search, Trash2, Ghost } from "lucide-react";
 import { Panel, inputCls } from "../ui";
 import { Image as Img } from "@/components/ui/image";
 import {
