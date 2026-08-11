@@ -14,7 +14,7 @@ export default function AdminRoute() {
   }
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (user?.role !== "admin") return <Navigate to="/dashboard" replace />;
+  if (user?.role !== "admin" && user?.role !== "super_admin") return <Navigate to="/dashboard" replace />;
 
   return <Outlet />;
 }

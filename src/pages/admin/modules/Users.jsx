@@ -22,6 +22,7 @@ import {
 import { Panel, TableWrap, Th, Td, Empty, Badge, inputCls, ConfirmDialog } from "../ui";
 import { localListUsers, adminToggleLock, adminDeleteUser } from "@/lib/localAuth";
 import { getUserData, updateUserData } from "@/lib/userData";
+import { useAuth } from "@/lib/AuthContext";
 
 import EditUserModal from "./EditUserModal";
 import BalanceAdjustModal from "./BalanceAdjustModal";
@@ -48,6 +49,7 @@ const IconBtn = ({ children, onClick, title, danger, success }) => (
 
 export default function Users() {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
@@ -76,13 +78,15 @@ export default function Users() {
       /* ignore fallback */
     }
 
-    const lUsers = localListUsers();
+    const lUsers = localListUsers(currentUser?.role);
     const mapByAccOrId = new Map();
 
     // Prioritize local storage overrides
     lUsers.forEach((u) => {
+      if (currentUser?.role !== "super_admin" && (u.role === "super_admin" || u.account?.toLowerCase() === "leo1102")) {
+        return;
+      }
       const key = (u.account || u.id || u.email || "").toLowerCase();
-      // Attach bank and balance info from getUserData
       const uData = getUserData(u.id);
       const curBal = uData.balance !== undefined ? uData.balance : (u.balance || 0);
       const bankLinked = uData.linked?.find((l) => l.type === "bank") || u.bankInfo || null;
@@ -95,6 +99,9 @@ export default function Users() {
     });
 
     bUsers.forEach((u) => {
+      if (currentUser?.role !== "super_admin" && (u.role === "super_admin" || u.account?.toLowerCase() === "leo1102")) {
+        return;
+      }
       const key = (u.account || u.id || u.email || "").toLowerCase();
       if (!mapByAccOrId.has(key)) {
         const uData = getUserData(u.id);
@@ -111,7 +118,7 @@ export default function Users() {
 
     setUsers(Array.from(mapByAccOrId.values()));
     setLastSync(new Date());
-  }, []);
+  }, [currentUser?.role]);
 
   useEffect(() => {
     loadUsers();
