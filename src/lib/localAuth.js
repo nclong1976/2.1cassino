@@ -102,13 +102,37 @@ const findDefault = (acc) =>
   DEFAULT_ACCOUNTS.find((d) => d.account.toLowerCase() === acc.toLowerCase());
 
 // Đăng nhập bằng tài khoản + mật khẩu. Trả về user và tự lưu phiên.
-// Tìm kiếm không phân biệt hoa/thường, ở cả localStorage lẫn danh sách mặc định.
-export const localLogin = ({ account, password }) => {
+// Hỗ trợ đăng nhập đa thiết bị (Multi-Device Login) bằng cách tự động tra cứu từ Supabase DB nếu chưa có ở thiết bị hiện tại.
+export const localLogin = async ({ account, password }) => {
   ensureSeedAdmin();
   const acc = (account || "").trim();
   const users = readUsers();
-  const found = users.find((u) => u.account.toLowerCase() === acc.toLowerCase());
+  let found = users.find((u) => u.account.toLowerCase() === acc.toLowerCase());
   const def = findDefault(acc);
+
+  // Nếu thiết bị hiện tại chưa có thông tin user, kiểm tra trên cơ sở dữ liệu Supabase DB
+  if (!found && isSupabaseConfigured()) {
+    try {
+      const spUser = await spLoginUser({ account: acc, password });
+      if (spUser) {
+        found = buildUser(spUser.account, {
+          id: spUser.id,
+          password: spUser.password_hash || password,
+          payPassword: spUser.pay_password || "",
+          fullName: spUser.full_name || spUser.account,
+          role: spUser.role || "user",
+          balance: Number(spUser.balance) || 0,
+          locked: spUser.locked || false,
+        });
+        users.push(found);
+        writeUsers(users);
+      }
+    } catch (e) {
+      if (e.message?.includes("Mật khẩu không chính xác") || e.message?.includes("tạm khóa")) {
+        throw e;
+      }
+    }
+  }
 
   if (!found && !def) {
     throw new Error("Tài khoản không tồn tại");
@@ -125,12 +149,6 @@ export const localLogin = ({ account, password }) => {
     payPassword: def.payPassword,
     fullName: def.fullName,
   });
-
-  if (isSupabaseConfigured()) {
-    spLoginUser({ account: acc, password }).catch((e) => {
-      console.warn("Supabase login sync info:", e?.message);
-    });
-  }
 
   return setSessionUser(stripSecret(base));
 };
