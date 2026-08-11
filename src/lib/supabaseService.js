@@ -248,3 +248,85 @@ export const spFetchBanners = async () => {
   if (error) return null;
   return data;
 };
+
+/**
+ * Realtime User Profile Subscription
+ */
+export const spSubscribeUserProfile = (userId, onProfileChange) => {
+  if (!isSupabaseConfigured() || !supabase || !userId) return () => {};
+
+  const channel = supabase
+    .channel(`public:users_profile:${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'users_profile' },
+      (payload) => {
+        if (payload.new && (payload.new.id === userId || payload.new.account === userId)) {
+          onProfileChange(payload.new);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
+/**
+ * Transactions Sync
+ */
+export const spFetchUserTransactions = async (userId) => {
+  if (!isSupabaseConfigured() || !userId) return null;
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) return null;
+  return data;
+};
+
+/**
+ * Withdraw Requests Sync
+ */
+export const spFetchUserWithdrawRequests = async (userId) => {
+  if (!isSupabaseConfigured() || !userId) return null;
+
+  const { data, error } = await supabase
+    .from('withdraw_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) return null;
+  return data;
+};
+
+export const spCreateWithdrawRequest = async (req) => {
+  if (!isSupabaseConfigured() || !req) return null;
+
+  const newReq = {
+    id: req.id || 'WR_' + Date.now().toString(36),
+    user_id: req.userId,
+    account: req.account || '',
+    full_name: req.fullName || '',
+    amount: req.amount,
+    bank_info: req.bankInfo || {},
+    status: 'pending',
+    created_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('withdraw_requests')
+    .insert([newReq])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Supabase create withdraw request error:', error);
+  }
+  return data;
+};

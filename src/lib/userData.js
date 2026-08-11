@@ -1,8 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { isSupabaseConfigured } from "./supabase";
-import { spGetUserProfile } from "./supabaseService";
+import {
+  spGetUserProfile,
+  spFetchUserTransactions,
+  spFetchUserWithdrawRequests,
+  spSubscribeUserProfile,
+} from "./supabaseService";
 
-// Kho dữ liệu cá nhân theo user (localStorage) — trạng thái sạch khi đăng ký.
+// Kho dữ liệu cá nhân theo user (localStorage cache + Supabase DB sync)
 const key = (userId) => `userdata_${userId}`;
 
 export const defaultUserData = () => ({
@@ -76,7 +81,112 @@ export const subscribeUserData = (cb) => {
   return () => listeners.delete(cb);
 };
 
-// React hook tiện lợi cho component.
+// Hàm đồng bộ toàn diện trạng thái tài khoản người dùng từ Supabase DB (Balance, Bank, Txs, WithdrawRequests)
+export const syncFullAccountState = async (userId) => {
+  if (!isSupabaseConfigured() || !userId || userId === "guest_user") return;
+
+  try {
+    const uid = resolveUserId(userId);
+    const spProfile = await spGetUserProfile(uid);
+
+    if (spProfile) {
+      const curData = getUserData(uid);
+      const patch = {};
+
+      // 1. Đồng bộ Số Dư (Balance)
+      if (typeof spProfile.balance === "number" && curData.balance !== spProfile.balance) {
+        patch.balance = spProfile.balance;
+      }
+
+      // 2. Đồng bộ Thông tin Ngân hàng đã liên kết (Bank Info)
+      if (spProfile.bank_info && spProfile.bank_info.bankName) {
+        const bankObj = {
+          id: "bank_sp_" + (spProfile.id || uid),
+          type: "bank",
+          bankName: spProfile.bank_info.bankName,
+          accountNumber: spProfile.bank_info.accountNumber || "",
+          holder: spProfile.bank_info.holder || spProfile.full_name || "",
+        };
+        const existingLinked = curData.linked || [];
+        const hasBank = existingLinked.some((l) => l.type === "bank" && l.accountNumber === bankObj.accountNumber);
+        if (!hasBank) {
+          const filtered = existingLinked.filter((l) => l.type !== "bank");
+          patch.linked = [bankObj, ...filtered];
+        }
+      }
+
+      if (Object.keys(patch).length > 0) {
+        updateUserData(uid, patch);
+      }
+    }
+
+    // 3. Đồng bộ Lịch sử Giao dịch (Transactions)
+    const spTxs = await spFetchUserTransactions(uid);
+    if (spTxs && Array.isArray(spTxs) && spTxs.length > 0) {
+      const curData = getUserData(uid);
+      const localTxs = curData.txs || [];
+      const mergedMap = new Map();
+
+      // Thêm giao dịch local trước
+      localTxs.forEach((tx) => mergedMap.set(tx.id, tx));
+
+      // Merge giao dịch từ Supabase
+      spTxs.forEach((tx) => {
+        mergedMap.set(tx.id, {
+          id: tx.id,
+          type: tx.type,
+          amount: Number(tx.amount),
+          status: tx.status || "completed",
+          method: tx.method || "System",
+          reason: tx.reason || "",
+          time: new Date(tx.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) + " " + new Date(tx.created_at).toLocaleDateString("vi-VN"),
+          created_date: tx.created_at,
+        });
+      });
+
+      const mergedList = Array.from(mergedMap.values()).sort(
+        (a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0)
+      );
+
+      if (JSON.stringify(localTxs) !== JSON.stringify(mergedList)) {
+        updateUserData(uid, { txs: mergedList });
+      }
+    }
+
+    // 4. Đồng bộ Đơn rút tiền (Withdraw Requests)
+    const spWRs = await spFetchUserWithdrawRequests(uid);
+    if (spWRs && Array.isArray(spWRs) && spWRs.length > 0) {
+      const curData = getUserData(uid);
+      const localWRs = curData.withdrawRequests || [];
+      const wrMap = new Map();
+
+      localWRs.forEach((w) => wrMap.set(w.id, w));
+      spWRs.forEach((w) => {
+        wrMap.set(w.id, {
+          id: w.id,
+          userId: w.user_id,
+          account: w.account,
+          amount: Number(w.amount),
+          bankInfo: w.bank_info || {},
+          status: w.status,
+          created_at: w.created_at,
+        });
+      });
+
+      const mergedWRs = Array.from(wrMap.values()).sort(
+        (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      );
+
+      if (JSON.stringify(localWRs) !== JSON.stringify(mergedWRs)) {
+        updateUserData(uid, { withdrawRequests: mergedWRs });
+      }
+    }
+  } catch (e) {
+    console.warn("Cross-device sync info:", e?.message);
+  }
+};
+
+// React hook tiện lợi cho component với Realtime Supabase Sync
 export const useUserData = (userId) => {
   const uid = resolveUserId(userId);
   const [data, setData] = useState(() => getUserData(uid));
@@ -94,12 +204,17 @@ export const useUserData = (userId) => {
   useEffect(() => {
     refresh();
 
-    // 1. In-memory pub/sub
+    // 1. Initial full account state sync from Supabase DB
+    if (isSupabaseConfigured() && uid && uid !== "guest_user") {
+      syncFullAccountState(uid);
+    }
+
+    // 2. In-memory pub/sub
     const unsub = subscribeUserData((notifiedUid) => {
       if (!uid || notifiedUid === uid) refresh();
     });
 
-    // 2. Realtime FORCE_BALANCE_SYNC event handler
+    // 3. Realtime FORCE_BALANCE_SYNC event handler
     const handleForceSync = (e) => {
       if (!e.detail?.userId || e.detail.userId === uid) {
         refresh();
@@ -108,7 +223,7 @@ export const useUserData = (userId) => {
     window.addEventListener("FORCE_BALANCE_SYNC", handleForceSync);
     window.addEventListener("user-data-changed", handleForceSync);
 
-    // 3. Cross-tab localStorage synchronization
+    // 4. Cross-tab localStorage synchronization
     const handleStorage = (e) => {
       if (!e.key || e.key === key(uid)) {
         refresh();
@@ -116,27 +231,41 @@ export const useUserData = (userId) => {
     };
     window.addEventListener("storage", handleStorage);
 
-    // 4. Sync on window focus
-    const handleFocus = () => refresh();
+    // 5. Sync on window focus
+    const handleFocus = () => {
+      refresh();
+      if (isSupabaseConfigured() && uid && uid !== "guest_user") {
+        syncFullAccountState(uid);
+      }
+    };
     window.addEventListener("focus", handleFocus);
 
-    // 5. Real-time polling mechanism & Supabase remote balance sync
+    // 6. Supabase Realtime User Profile Listener (Instant push across devices)
+    let unsubRealtime = () => {};
+    if (isSupabaseConfigured() && uid && uid !== "guest_user") {
+      unsubRealtime = spSubscribeUserProfile(uid, (spProfile) => {
+        if (spProfile) {
+          if (typeof spProfile.balance === "number") {
+            updateUserData(uid, { balance: spProfile.balance });
+          }
+          if (spProfile.locked) {
+            window.dispatchEvent(new Event("local-users-changed"));
+          }
+        }
+      });
+    }
+
+    // 7. Interval background sync (every 2.5 seconds)
     const timer = setInterval(() => {
       refresh();
-      if (isSupabaseConfigured() && uid && uid !== 'guest_user') {
-        spGetUserProfile(uid).then((spProfile) => {
-          if (spProfile && typeof spProfile.balance === 'number') {
-            const currentData = getUserData(uid);
-            if (currentData.balance !== spProfile.balance) {
-              updateUserData(uid, { balance: spProfile.balance });
-            }
-          }
-        }).catch(() => {});
+      if (isSupabaseConfigured() && uid && uid !== "guest_user") {
+        syncFullAccountState(uid);
       }
-    }, 2000);
+    }, 2500);
 
     return () => {
       unsub();
+      unsubRealtime();
       window.removeEventListener("FORCE_BALANCE_SYNC", handleForceSync);
       window.removeEventListener("user-data-changed", handleForceSync);
       window.removeEventListener("storage", handleStorage);
