@@ -1,6 +1,7 @@
 // Hệ thống thông báo cục bộ per-user (localStorage) — clean slate khi đăng ký.
 import { localListUsers } from "@/lib/localAuth";
 import { toast } from "@/components/ui/use-toast";
+import { queryClientInstance } from "@/lib/query-client";
 
 const inboxKey = (userId) => `stargame_notif_${userId}`;
 const ADMIN_LOG_KEY = "stargame_notif_adminlog";
@@ -14,6 +15,10 @@ const read = (userId) => {
 const write = (userId, list) => {
   try { localStorage.setItem(inboxKey(userId), JSON.stringify(list.slice(0, 100))); } catch { /* ignore */ }
   emit(userId);
+  try {
+    queryClientInstance.invalidateQueries({ queryKey: ["notifications", userId] });
+    queryClientInstance.invalidateQueries({ queryKey: ["userData", userId] });
+  } catch { /* ignore */ }
 };
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const emit = (userId) => {

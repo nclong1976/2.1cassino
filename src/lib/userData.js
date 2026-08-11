@@ -53,6 +53,22 @@ export const getUserData = (userId) => {
   }
 };
 
+// Create BroadcastChannel for cross-tab user data synchronization
+let userChannel = null;
+if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
+  try {
+    userChannel = new BroadcastChannel("sands_user_realtime_channel");
+    userChannel.onmessage = (e) => {
+      if (e.data?.type === "USER_DATA_UPDATED" && e.data?.userId) {
+        listeners.forEach((l) => l(e.data.userId));
+        try {
+          queryClientInstance.invalidateQueries({ queryKey: ["userData", e.data.userId] });
+        } catch { /* ignore */ }
+      }
+    };
+  } catch { /* ignore */ }
+}
+
 export const saveUserData = (userId, data) => {
   const uid = resolveUserId(userId);
   try {
@@ -64,11 +80,14 @@ export const saveUserData = (userId, data) => {
   } catch { /* ignore */ }
   listeners.forEach((l) => l(uid));
 
-  // Sync with TanStack Query & Socket.io
+  // Sync with TanStack Query, BroadcastChannel & Socket.io
   try {
     queryClientInstance.setQueryData(["userData", uid], data);
     queryClientInstance.invalidateQueries({ queryKey: ["userData", uid] });
     emitSocketEvent("user:balance_change", { userId: uid, data });
+    if (userChannel) {
+      userChannel.postMessage({ type: "USER_DATA_UPDATED", userId: uid, data });
+    }
   } catch { /* ignore */ }
 };
 
