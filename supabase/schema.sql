@@ -105,6 +105,13 @@ ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.banners ENABLE ROW LEVEL SECURITY;
 
 -- PERMISSIVE RLS POLICIES FOR CLIENT-SIDE APP ACCESS
+DROP POLICY IF EXISTS "Allow public read/write users_profile" ON public.users_profile;
+DROP POLICY IF EXISTS "Allow public read/write transactions" ON public.transactions;
+DROP POLICY IF EXISTS "Allow public read/write withdraw_requests" ON public.withdraw_requests;
+DROP POLICY IF EXISTS "Allow public read/write game_bets" ON public.game_bets;
+DROP POLICY IF EXISTS "Allow public read/write chat_messages" ON public.chat_messages;
+DROP POLICY IF EXISTS "Allow public read/write banners" ON public.banners;
+
 CREATE POLICY "Allow public read/write users_profile" ON public.users_profile FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read/write transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read/write withdraw_requests" ON public.withdraw_requests FOR ALL USING (true) WITH CHECK (true);
