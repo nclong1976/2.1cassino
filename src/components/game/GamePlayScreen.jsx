@@ -12,7 +12,7 @@ import { Image } from "@/components/ui/image";
 import { getGameById } from "@/components/home/homeData";
 import { useAuth } from "@/lib/AuthContext";
 import { useUserData, getUserData, updateUserData as setGlobalUserData, resolveUserId } from "@/lib/userData";
-import { getCurrentRoundInfo, getPeriodDraw, settlePendingBets } from "@/lib/gameRoundManager";
+import { getCurrentRoundInfo, getPeriodDraw, settlePendingBets } from "@/lib/gameRoundManager"; import { isSupabaseConfigured } from "@/lib/supabase"; import { spSaveBets, spSyncBalanceState } from "@/lib/supabaseService";
 
 export default function GamePlayScreen({ gameId, tier, variantId }) {
   const config = useMemo(() => getGameConfig(gameId), [gameId]);
@@ -336,7 +336,7 @@ export default function GamePlayScreen({ gameId, tier, variantId }) {
 
     // 7. Atomic DB-First Transaction with Lock & Balance Re-validation
     let betSuccess = false;
-    let failureMsg = "";
+    let failureMsg = ""; let resultBalance = 0; let resultTurnover = 0;
 
     setGlobalUserData(uid, (latestDB) => {
       // Re-verify Admin account lock at DB callback millisecond
@@ -352,11 +352,11 @@ export default function GamePlayScreen({ gameId, tier, variantId }) {
         return latestDB;
       }
 
-      betSuccess = true;
+      betSuccess = true; resultBalance = +(dbBal - total).toFixed(2); resultTurnover = +((latestDB?.turnover || 0) + total).toFixed(2);
       return {
         ...latestDB,
-        balance: +(dbBal - total).toFixed(2),
-        turnover: +((latestDB?.turnover || 0) + total).toFixed(2),
+        balance: resultBalance,
+        turnover: resultTurnover,
         bets: [...(latestDB?.bets || []), ...newBets],
         txs: [newTx, ...(latestDB?.txs || [])],
       };
@@ -367,7 +367,7 @@ export default function GamePlayScreen({ gameId, tier, variantId }) {
       return;
     }
 
-    // 8. Realtime Balance Sync signal
+    if (isSupabaseConfigured()) { spSaveBets(uid, newBets).catch((e) => console.warn("Supabase bet sync info:", e?.message)); spSyncBalanceState(uid, { balance: resultBalance, turnover: resultTurnover }).catch((e) => console.warn("Supabase balance sync info:", e?.message)); } /* 8. Realtime Balance Sync signal */
     try {
       window.dispatchEvent(new CustomEvent("FORCE_BALANCE_SYNC", { detail: { userId: uid } }));
     } catch { /* ignore */ }
